@@ -1,14 +1,27 @@
-# Welcome to your CDK TypeScript project
+# Web Socket Demo
 
-This is a blank project for CDK development with TypeScript.
+Simple demo of a web socket application using AWS API Gateway. Adapted from tutorial here: https://aws.plainenglish.io/setup-api-gateway-websocket-api-with-cdk-c1e58cf3d2be
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+## Pre-requisites
 
-## Useful commands
+* NodeJS v18+
+* AWS CLI v2+
+* A websocket capable client for usage
+  * For NPM `wcat` is a good example
 
-* `npm run build`   compile typescript to js
-* `npm run watch`   watch for changes and compile
-* `npm run test`    perform the jest unit tests
-* `cdk deploy`      deploy this stack to your default AWS account/region
-* `cdk diff`        compare deployed stack with current state
-* `cdk synth`       emits the synthesized CloudFormation template
+## Setup
+
+* `npm ci`
+* `npx cdk deploy` - provide AWS profile as appropriate using the `--profile` flag
+* Copy the lambda function name from the `init-function-name` output
+* Invoke the init lambda to setup the database `aws lambda invoke <init-function-name>`
+  * The database can take up to 30 seconds to start up so this command may fail on first try
+
+## Usage
+
+* Obtain the API URL from the output of the CDK deploy step
+* Connect two or more terminal windows to the server
+  * `npx wcat -c <websocket-api-url>`
+* Send a payload with the following format. The value of the message property can be any string of text
+  * `{ "action": "send", "message": "<enter_message_here>" }`
+* Other connected clients will receive the value of the `message` property
