@@ -27,6 +27,7 @@ export const send = async (event: ProxyEvent) => {
   const query = 'SELECT * FROM connections WHERE connectionId != :connectionId'
   const connections = await db.query(query, { connectionId })
 
+  // Persistent connections maintained here
   const apigwManagementApi = new ApiGatewayManagementApi({
     apiVersion: '2018-11-29',
     endpoint: `${event.requestContext.domainName ?? ''}/${event.requestContext.stage}`
@@ -34,7 +35,7 @@ export const send = async (event: ProxyEvent) => {
 
   const message = JSON.parse(event.body ?? '').message
 
-  const sendRequests = connections.records.map(async (cx: any) => await handleConnection(cx, message, apigwManagementApi))
+  const sendRequests = connections.records.map(async (connection: any) => await sendRequestToConnection(connection, message, apigwManagementApi))
 
   await Promise.all(sendRequests)
 
@@ -44,7 +45,7 @@ export const send = async (event: ProxyEvent) => {
   })
 }
 
-const handleConnection = async (
+const sendRequestToConnection = async (
   connection: Connection,
   message: string,
   api: ApiGatewayManagementApi

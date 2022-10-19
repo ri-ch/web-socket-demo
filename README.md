@@ -7,7 +7,7 @@ Simple demo of a web socket application using AWS API Gateway. Adapted from tuto
 * NodeJS v18+
 * AWS CLI v2+
 * A websocket capable client for usage
-  * For NPM `wcat` is a good example
+  * For NPM `wscat` is a good example
 
 ## Setup
 
@@ -21,7 +21,7 @@ Simple demo of a web socket application using AWS API Gateway. Adapted from tuto
 
 * Obtain the API URL from the output of the CDK deploy step
 * Connect two or more terminal windows to the server
-  * `npx wcat -c <websocket-api-url>`
+  * `npx wscat -c <websocket-api-url>`
 * Send a payload with the following format. The value of the message property can be any string of text
   * `{ "action": "send", "message": "<enter_message_here>" }`
 * Other connected clients will receive the value of the `message` property

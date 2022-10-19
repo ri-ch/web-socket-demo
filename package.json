@@ -34,9 +34,5 @@
     "constructs": "^10.0.0",
     "data-api-client": "^1.3.0",
     "source-map-support": "^0.5.21"
-  },
-  "workspaces": [
-    "function",
-    "./"
-  ]
+  }
 }

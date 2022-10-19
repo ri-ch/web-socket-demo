@@ -111,10 +111,10 @@ const typescriptBundler = {
       const commands = [
         'cd function',
         'rm -rf dist',
-        'npm ci',
+        'npm i',
         'npx tsc',
         'cp package*.json ./dist',
-        'cd ./dist && npm ci --omit dev && cd ..',
+        'cd ./dist && npm i --omit dev && cd ..',
         'rm ./dist/package*.json',
         `cp -R ./dist/ ${outputDir}`
       ]
