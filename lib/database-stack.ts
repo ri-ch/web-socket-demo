@@ -5,8 +5,8 @@ import { WebSocketApi, WebSocketStage } from '@aws-cdk/aws-apigatewayv2-alpha'
 import { WebSocketLambdaIntegration } from '@aws-cdk/aws-apigatewayv2-integrations-alpha'
 import { SubnetType, Vpc } from 'aws-cdk-lib/aws-ec2'
 import { AuroraPostgresEngineVersion, DatabaseClusterEngine, ServerlessCluster } from 'aws-cdk-lib/aws-rds'
-import { AssetCode, Function, Runtime } from 'aws-cdk-lib/aws-lambda'
-import childProcess = require('child_process')
+import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs'
+import { Runtime } from 'aws-cdk-lib/aws-lambda'
 
 export class DatabaseStack extends Stack {
   constructor (scope: Construct, id: string, props?: StackProps) {
@@ -34,10 +34,10 @@ export class DatabaseStack extends Stack {
     })
 
     const createFunction = (functionName: string) =>
-      new Function(this, `${functionName}.function`, {
+      new NodejsFunction(this, `${functionName}.function`, {
         runtime: Runtime.NODEJS_16_X,
-        handler: `index.${functionName}`,
-        code: AssetCode.fromAsset('function', { bundling: typescriptBundler }),
+        entry: './function/src/index.ts',
+        handler: functionName,
         environment: {
           CLUSTER_ARN: cluster.clusterArn,
           SECRET_ARN: cluster.secret?.secretArn ?? '',
@@ -101,27 +101,5 @@ export class DatabaseStack extends Stack {
     new CfnOutput(this, 'secret-arn', {
       value: cluster.secret?.secretArn ?? ''
     })
-  }
-}
-
-const typescriptBundler = {
-  image: Runtime.NODEJS_16_X.bundlingImage,
-  local: {
-    tryBundle (outputDir: string) {
-      const commands = [
-        'cd function',
-        'rm -rf dist',
-        'npm i',
-        'npx tsc',
-        'cp package*.json ./dist',
-        'cd ./dist && npm i --omit dev && cd ..',
-        'rm ./dist/package*.json',
-        `cp -R ./dist/ ${outputDir}`
-      ]
-
-      childProcess.execSync(commands.join(' && '))
-
-      return true
-    }
   }
 }
