@@ -1,41 +1,41 @@
 import { APIGatewayProxyEvent as ProxyEvent } from 'aws-lambda'
-import { ApiGatewayManagementApi } from 'aws-sdk'
-import Client = require('data-api-client')
+import { ApiGatewayManagementApi, DynamoDB } from 'aws-sdk'
 
-const db = Client({
-  secretArn: process.env.SECRET_ARN ?? 'UNDEFINED',
-  resourceArn: process.env.CLUSTER_ARN ?? 'UNDEFINED',
-  database: process.env.DB_NAME
-})
-
-export const init = async () => {
-  const queries = [
-    'CREATE TABLE IF NOT EXISTS connections ( connectionId varchar(100) );'
-  ]
-
-  await db.query(queries.join('\n'))
-  return 'OK'
-}
+const ddb = new DynamoDB.DocumentClient({ apiVersion: '2012-08-10', region: process.env.AWS_REGION })
 
 interface Connection {
-  connectionid: string
+  connectionId: string
 }
 
 export const send = async (event: ProxyEvent) => {
   const connectionId = event.requestContext.connectionId
 
-  const query = 'SELECT * FROM connections WHERE connectionId != :connectionId'
-  const connections = await db.query(query, { connectionId })
+  if (connectionId === undefined) {
+    throw new Error('connectionId not specified in process.env.TABLE_NAME')
+  }
+
+  const tableName = process.env.TABLE_NAME
+  let connectionData
+
+  if (tableName === undefined) {
+    throw new Error('tableName not specified in process.env.TABLE_NAME')
+  }
+
+  try {
+    connectionData = await ddb.scan({ TableName: tableName, ProjectionExpression: 'connectionId' }).promise()
+  } catch (e: any) {
+    return { statusCode: 500, body: e.stack }
+  }
 
   // Persistent connections maintained here
   const apigwManagementApi = new ApiGatewayManagementApi({
     apiVersion: '2018-11-29',
-    endpoint: `${event.requestContext.domainName ?? ''}/${event.requestContext.stage}`
+    endpoint: `${event.requestContext.domainName ?? ''}/${event.requestContext.stage}` // eslint-disable-line
   })
 
   const message = JSON.parse(event.body ?? '').message
 
-  const sendRequests = connections.records.map(async (connection: any) => await sendRequestToConnection(connection, message, apigwManagementApi))
+  const sendRequests = (connectionData.Items as Connection[]).filter(connection => connection.connectionId !== connectionId).map(async (connection: any) => await sendRequestToConnection(connection, message, tableName, apigwManagementApi))
 
   await Promise.all(sendRequests)
 
@@ -48,29 +48,44 @@ export const send = async (event: ProxyEvent) => {
 const sendRequestToConnection = async (
   connection: Connection,
   message: string,
+  tableName: string,
   api: ApiGatewayManagementApi
 ) => {
   try {
     await api.postToConnection({
-      ConnectionId: connection.connectionid,
+      ConnectionId: connection.connectionId,
       Data: message
     }).promise()
   } catch (e: any) {
     if (e.statusCode === 410) {
-      console.log(`Found stale connection, deleting ${connection.connectionid}`)
-      await db.query('DELETE FROM connections WHERE connectionId = :connectionId', { connectionId: connection.connectionid })
+      console.log(`Found stale connection, deleting ${connection.connectionId}`)
+      await ddb.delete({ TableName: tableName, Key: { ConnectionId: connection.connectionId } }).promise()
     } else {
       throw e
     }
   }
 }
-
 export const connect = async (event: ProxyEvent) => {
   const connectionId = event.requestContext.connectionId
 
-  await db.query('INSERT INTO connections (connectionId) VALUES (:connectionId)', { connectionId })
+  const tableName = process.env.TABLE_NAME
 
-  console.log('Client Connected')
+  if (tableName === undefined) {
+    throw new Error('tableName not specified in process.env.TABLE_NAME')
+  }
+
+  const putParams = {
+    TableName: tableName,
+    Item: {
+      connectionId
+    }
+  }
+
+  try {
+    await ddb.put(putParams).promise()
+  } catch (err) {
+    return { statusCode: 500, body: 'Failed to connect: ' + JSON.stringify(err) }
+  }
 
   return ({
     statusCode: 200,
@@ -79,18 +94,24 @@ export const connect = async (event: ProxyEvent) => {
 }
 
 export const disconnect = async (event: ProxyEvent) => {
-  const connectionId = event.requestContext.connectionId
+  const tableName = process.env.TABLE_NAME
 
-  await db.query('DELETE FROM connections WHERE connectionId = :connectionId', { connectionId })
+  if (tableName === undefined) {
+    throw new Error('tableName not specified in process.env.TABLE_NAME')
+  }
 
-  console.log('Client Disconnected')
+  const deleteParams = {
+    TableName: tableName,
+    Key: {
+      connectionId: event.requestContext.connectionId
+    }
+  }
 
-  return ({
-    statusCode: 200,
-    body: 'Disconnected.'
-  })
-}
+  try {
+    await ddb.delete(deleteParams).promise()
+  } catch (err) {
+    return { statusCode: 500, body: 'Failed to disconnect: ' + JSON.stringify(err) }
+  }
 
-export const authorize = async () => {
-
+  return { statusCode: 200, body: 'Disconnected.' }
 }
